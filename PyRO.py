@@ -7,6 +7,7 @@ import socket
 import struct
 import crcmod
 import threading
+import time
 import signal
 import Joystick as js
 
@@ -31,6 +32,7 @@ CRC16FUN = crcmod.predefined.mkCrcFun('crc-16')
 # Dictionaries to lookup datatype and packing format for parameters
 TYPES = {"b":0x62, "c":0x63, "i":0x69, "l":0x6C, "f":0x66}
 TYPE_DICT = {0x62:'<i', 0x63:'<i', 0x69:'>i', 0x6C:'>i', 0x66:'>f'}
+TYPE_DICTc = {"b":'<i', "c":'<i', "i":'>h', "l":'>i', "f":'>f'}
 
 # Necessary in order to work on both python 2 and 3
 copy = (lambda x: [i for i in x])
@@ -64,6 +66,8 @@ class RobotOpen:
 					self.send_packet(self.assemble_control_packet(dat))
 			else:
 				self.send_packet(HEARTBEAT)
+			#time.sleep(0.03)
+			self.recv_packets(0.1) #100ms
 
 	# handler so thread is killed on ctrl-c
 	def _cc_handle(self, signum, frame):
@@ -94,6 +98,23 @@ class RobotOpen:
 		""" takes array and sends to device """
 		self.sock.sendto(struct.pack('%iB' % len(pack), *pack), (self.ip, self.port))
 
+	def recv_packets(self, dt):
+		""" recv all packets, in non-blocking mode """
+		self.sock.setblocking(0)
+		st = time.time()
+		while time.time() - st < dt:
+			data = []
+			try:
+				data,addr = self.sock.recvfrom(65535)
+			except:  #no data since non-blocking recv()
+				break
+			if len(data) == 0: 
+				break
+			else:
+				print addr
+				self.parseData(data)
+		self.sock.setblocking(1)
+		
 	def set_joystick(self, state):
 		""" sends control packet with values passed for joystick """
 		self.queue.put([state])
@@ -125,6 +146,44 @@ class RobotOpen:
 		append_crc16(pck)
 		return pck
 
+	def parseData(self, data):
+		#print data
+		#print ":".join("{:02x}".format(ord(c)) for c in data)
+		if data[0] == 'p':
+			self.parsePrint(data)
+		elif data[0] == 'd':
+			self.parseDS(data)
+		else:
+			print 'TODO:',data[0] #
+	def parseDS(self, data):
+		data = data[1:]
+		name = ''
+		num = 0
+		while len(data) > 0:
+			length = ord(data[0])
+			typ = data[1]
+			if typ == 'b': #0x62: #'b'
+				num = data[2]
+				name = data[3:length]
+			elif typ == 'c': #0x63: #'c'
+				num = data[2]
+				name = data[3:length]
+			elif typ == 'i': #0x69: #'i'
+				num = struct.unpack(TYPE_DICTc[typ], data[2:4])[0]
+				name = data[4:length]
+			elif typ == 'l': #0x6C: #'l'
+				num = struct.unpack(TYPE_DICTc[typ], data[2:6])[0]
+				name = data[6:length]
+			elif typ == 'f': #0x66: #'f'
+				num = struct.unpack(TYPE_DICTc[typ], data[2:6])[0]
+				name = data[6:length]
+			else:
+				print 'TODO-DS'
+			print name,"====>", num
+			data = data[length:]
+	def parsePrint(self, data):
+		print 'TODO-print' #
+	
 	def get_parameter_list(self):
 		""" returns list of parameters on device """
 		r = [[0]]

@@ -37,10 +37,11 @@ AUX4 = 23
 
 class Joystick:
 	def __init__(self, dat=NULL_JOY):
-		self.states = dat
+		self.states = []
+		self.states[:] = dat
 
 	def set_sticks(self, lx, ly, rx, ry):
-		self.states[0:3] = [lx, ly, rx, ry]
+		self.states[0:4] = [lx, ly, rx, ry]
 
 	def set_axis(self, axis, val):
 		self.states[axis] =  val
@@ -55,4 +56,4 @@ class Joystick:
 		return self.states
 
 	def clear_states(self):
-		self.states = NULL_JOY
+		self.states[:] = NULL_JOY
